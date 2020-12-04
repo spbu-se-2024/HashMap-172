@@ -2,8 +2,8 @@
 #include <inttypes.h>
 #include <string.h>
 #include <ctype.h>
+#include "status.h"
 #include "map.h"
-#include "hash_map.h"
 #include "hash_functions.h"
 
 #define MAX_WORD_LENGTH 1024
@@ -51,7 +51,7 @@ int main(int argc, char *argv[]) {
     size_t init_map_capacity;
     if (str_to_size_t(argv[INIT_MAP_CAPACITY_ARG_INDEX], &init_map_capacity, "initial map capacity") != 0)
         return -1;
-    MAP *map = new_HASH_MAP_with_default_load_factor(init_map_capacity, simple_hash);
+    MAP *map = new_MAP_with_default_load_factor(init_map_capacity, simple_hash);
     if (map == NULL) {
         LOG_ERROR("Unable to allocate memory for hash map\n");
         return -1;
@@ -72,18 +72,17 @@ int main(int argc, char *argv[]) {
         }
     }
     fclose(input_file);
-    if (MAP_printf_stats(map) < 0) {
-        LOG_ERROR("Unable to print map stats\n"); // FIXME this logic can be extracted to map.c
-        MAP_free(map);
-        return -1;
-    }
+    MAP_fprint_stats_or_fail(map, stdout);
+    if (MAP_log_and_free_on_error(map)) return -1;
     ENTRY_ITERATOR *iterator = MAP_get_entry_iterator(map);
+    if (MAP_log_and_free_on_error(map)) return -1;
     if (MAP_log_and_free_on_error(map)) return -1;
     ENTRY *most_common_word_entry = NULL, *cur_entry;
     while ((cur_entry = ENTRY_ITERATOR_next(iterator)) != NULL)
         if (most_common_word_entry == NULL || ENTRY_get_value(cur_entry) > ENTRY_get_value(most_common_word_entry))
             most_common_word_entry = cur_entry;
     ENTRY_ITERATOR_free(iterator);
+    if (MAP_log_and_free_on_error(map)) return -1;
     if (most_common_word_entry == NULL) {
         LOG_ERROR("No words were found in input file\n");
         MAP_free(map);
