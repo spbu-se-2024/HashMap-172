@@ -50,7 +50,7 @@ struct map_t {
     hash_function_t hash_function;
     STATUS status;
     size_t capacity; // must be a power of 2, can't be 0
-    int modification_count; // increments on each map update, makes outdated iterators fail fast  FIXME overflow checks
+    unsigned modification_count; // increments on each map update, makes outdated iterators fail fast
     size_t size;
     size_t threshold; // if size reaches threshold, map is resized
     float load_factor;
@@ -69,8 +69,7 @@ static ENTRY **MAP_entry_ptr_by_key(MAP *map, map_key_t key) {
     return MAP_entry_ptr_by_key_and_hash(map, key, map->hash_function(key));
 }
 
-// doubles capacity
-static void MAP_resize(MAP *map) {
+static void MAP_double_capacity(MAP *map) {
     map->modification_count++;
     ENTRY **old_table = map->table;
     size_t old_capacity = map->capacity;
@@ -79,7 +78,7 @@ static void MAP_resize(MAP *map) {
     map->table = calloc(map->capacity, sizeof(ENTRY *));
     if (map->table == NULL) {
         map->status = (STATUS) {STATUS_OUT_OF_MEMORY, "resized table"};
-        free(old_table);
+        map->table = old_table;
         return;
     }
     for (size_t i = 0; i < old_capacity; i++) {
@@ -131,7 +130,7 @@ void MAP_put(MAP *map, map_key_t key, map_value_t value) {
         return;
     }
     *entry_ptr = entry;
-    if (map->size++ > map->threshold) MAP_resize(map);
+    if (map->size++ > map->threshold) MAP_double_capacity(map);
 }
 
 map_value_t *MAP_get(MAP *map, map_key_t key) {
@@ -181,7 +180,7 @@ int MAP_fprint_stats(MAP *map, FILE *stream) {
                            "size: %zu\n"
                            "chain count: %zu\n"
                            "average chain length: %f\n"
-                           "modification count: %d\n"
+                           "modification count: %u\n"
                            "============\n",
                    map->capacity, map->threshold, map->size, chain_count,
                    map->size / (float) chain_count, map->modification_count);
@@ -200,7 +199,7 @@ bool MAP_log_and_free_on_error(MAP *map) {
 
 struct entry_iterator_t {
     MAP *map;
-    int expected_modification_count;
+    unsigned expected_modification_count;
     size_t next_index;
     ENTRY *next_entry;
 };
