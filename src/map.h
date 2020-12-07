@@ -24,7 +24,6 @@ void ENTRY_ITERATOR_free(ENTRY_ITERATOR *iterator);
 
 // NULL if out of memory
 MAP *new_MAP(size_t capacity, float load_factor, hash_function_t hash_function);
-MAP *new_MAP_with_default_load_factor(size_t capacity, hash_function_t hash_function);
 
 size_t MAP_size(MAP *map);
 void MAP_clear(MAP *map);

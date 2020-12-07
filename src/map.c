@@ -2,8 +2,6 @@
 #include <memory.h>
 #include "map.h"
 
-static const float DEFAULT_LOAD_FACTOR = 0.75f;
-
 static const size_t MAX_CAPACITY = 1 + ((HASH_MAX < SIZE_MAX / 2) ? HASH_MAX : (SIZE_MAX / 2));
 
 struct entry_t {
@@ -263,8 +261,4 @@ MAP *new_MAP(size_t capacity, float load_factor, hash_function_t hash_function) 
     map->load_factor = load_factor < 0 ? -1 : load_factor;
     MAP_update_threshold(map);
     return map;
-}
-
-MAP *new_MAP_with_default_load_factor(size_t capacity, hash_function_t hash_function) {
-    return new_MAP(capacity, DEFAULT_LOAD_FACTOR, hash_function);
 }
