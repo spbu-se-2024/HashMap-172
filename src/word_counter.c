@@ -72,7 +72,7 @@ int main(int argc, char *argv[]) {
         }
     }
     fclose(input_file);
-    MAP_fprint_stats_or_fail(map, stdout);
+    MAP_fprint_stats(map, stdout);
     if (MAP_log_and_free_on_error(map)) return -1;
     ENTRY_ITERATOR *iterator = MAP_get_entry_iterator(map);
     if (MAP_log_and_free_on_error(map)) return -1;

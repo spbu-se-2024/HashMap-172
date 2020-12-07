@@ -32,8 +32,7 @@ void MAP_free(MAP *map);
 void MAP_put(MAP *map, map_key_t key, map_value_t value);
 map_value_t *MAP_get(MAP *map, map_key_t key);
 ENTRY_ITERATOR *MAP_get_entry_iterator(MAP *map);
-int MAP_fprint_stats(MAP *map, FILE *stream);
-void MAP_fprint_stats_or_fail(MAP *map, FILE *stream);
+void MAP_fprint_stats(MAP *map, FILE *stream);
 STATUS MAP_get_status(MAP *map);
 
 // true if there is error

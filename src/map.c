@@ -4,6 +4,8 @@
 
 static const float DEFAULT_LOAD_FACTOR = 0.75f;
 
+static const size_t MAX_CAPACITY = 1 + ((HASH_MAX < SIZE_MAX / 2) ? HASH_MAX : (SIZE_MAX / 2));
+
 struct entry_t {
     map_key_t key;
     map_value_t value;
@@ -52,8 +54,8 @@ struct map_t {
     size_t capacity; // must be a power of 2, can't be 0
     unsigned modification_count; // increments on each map update, makes outdated iterators fail fast
     size_t size;
-    size_t threshold; // if size reaches threshold, map is resized
-    float load_factor;
+    float threshold; // negative if resizing disabled
+    float load_factor; // negative if resizing disabled
 };
 
 static ENTRY **MAP_entry_ptr_by_key_and_hash(MAP *map, map_key_t key, hash_t hash) {
@@ -69,22 +71,26 @@ static ENTRY **MAP_entry_ptr_by_key(MAP *map, map_key_t key) {
     return MAP_entry_ptr_by_key_and_hash(map, key, map->hash_function(key));
 }
 
+static void MAP_update_threshold(MAP *map) {
+    map->threshold = (map->capacity == MAX_CAPACITY || map->load_factor < 0) ? -1 : map->capacity * map->load_factor;
+}
+
 static void MAP_double_capacity(MAP *map) {
     map->modification_count++;
-    ENTRY **old_table = map->table;
-    size_t old_capacity = map->capacity;
-    map->capacity = old_capacity << 1u; // FIXME check for overflow
-    map->threshold = map->capacity * map->load_factor;
-    map->table = calloc(map->capacity, sizeof(ENTRY *));
-    if (map->table == NULL) {
-        map->status = (STATUS) {STATUS_OUT_OF_MEMORY, "resized table"};
-        map->table = old_table;
+    size_t new_capacity = map->capacity << 1u;
+    if(new_capacity > MAX_CAPACITY) {
+        map->threshold = -1;
         return;
     }
-    for (size_t i = 0; i < old_capacity; i++) {
+    ENTRY **new_table = calloc(new_capacity, sizeof(ENTRY *));
+    if (new_table == NULL) {
+        map->status = (STATUS) {STATUS_OUT_OF_MEMORY, "resized table"};
+        return;
+    }
+    for (size_t i = 0; i < map->capacity; i++) {
         ENTRY *lowHead = NULL, *lowTail = NULL, *highHead = NULL, *highTail = NULL;
-        for (ENTRY *entry = old_table[i]; entry != NULL; entry = entry->next) {
-            if (entry->hash & old_capacity) {
+        for (ENTRY *entry = map->table[i]; entry != NULL; entry = entry->next) {
+            if (entry->hash & map->capacity) {
                 if (highTail == NULL) highHead = entry;
                 else highTail->next = entry;
                 highTail = entry;
@@ -96,14 +102,17 @@ static void MAP_double_capacity(MAP *map) {
         }
         if (lowTail != NULL) {
             lowTail->next = NULL;
-            map->table[i] = lowHead;
+            new_table[i] = lowHead;
         }
         if (highTail != NULL) {
             highTail->next = NULL;
-            map->table[i + old_capacity] = highHead;
+            new_table[i + map->capacity] = highHead;
         }
     }
-    free(old_table);
+    free(map->table);
+    map->table = new_table;
+    map->capacity = new_capacity;
+    MAP_update_threshold(map);
 }
 
 size_t MAP_size(MAP *map) {
@@ -130,7 +139,9 @@ void MAP_put(MAP *map, map_key_t key, map_value_t value) {
         return;
     }
     *entry_ptr = entry;
-    if (map->size++ > map->threshold) MAP_double_capacity(map);
+    map->size++;
+    if (map->threshold >= 0 && (float) map->size > map->threshold)
+        MAP_double_capacity(map);
 }
 
 map_value_t *MAP_get(MAP *map, map_key_t key) {
@@ -167,27 +178,22 @@ STATUS MAP_get_status(MAP *map) {
     return map->status;
 }
 
-int MAP_fprint_stats(MAP *map, FILE *stream) {
+void MAP_fprint_stats(MAP *map, FILE *stream) {
     size_t chain_count = 0;
     for (size_t i = 0; i < map->capacity; i++)
         if (map->table[i] != NULL) chain_count++;
     // FIXME we may be supposed to print chain lengths distribution as well
-    return fprintf(stream, "============\n"
-                           "MAP stats:\n"
-                           "status: ") + STATUS_fprint(&map->status, stream) +
-           fprintf(stream, "capacity: %zu\n"
-                           "threshold: %zu\n"
-                           "size: %zu\n"
-                           "chain count: %zu\n"
-                           "average chain length: %f\n"
-                           "modification count: %u\n"
-                           "============\n",
-                   map->capacity, map->threshold, map->size, chain_count,
-                   map->size / (float) chain_count, map->modification_count);
-}
-
-void MAP_fprint_stats_or_fail(MAP *map, FILE *stream) {
-    if (MAP_fprint_stats(map, stream) < 0)
+    if (fprintf(stream, "============\n"
+                        "MAP stats:\n"
+                        "capacity: %zu\n"
+                        "threshold: %0.f\n"
+                        "size: %zu\n"
+                        "chain count: %zu\n"
+                        "average chain length: %f\n"
+                        "modification count: %u\n"
+                        "============\n",
+                map->capacity, map->threshold, map->size, chain_count,
+                map->size / (float) chain_count, map->modification_count) < 0)
         map->status = (STATUS) {PRINT_ERROR, "stats"};
 }
 
@@ -243,7 +249,8 @@ MAP *new_MAP(size_t capacity, float load_factor, hash_function_t hash_function) 
     MAP *map = malloc(sizeof(MAP));
     if (map == NULL) return NULL;
     map->capacity = 1;
-    while (map->capacity < capacity) map->capacity <<= 1u; // FIXME check for overflow
+    while (map->capacity < capacity && map->capacity << 1u <= MAX_CAPACITY)
+        map->capacity <<= 1u;
     map->table = calloc(map->capacity, sizeof(ENTRY *));
     if (map->table == NULL) {
         free(map);
@@ -253,8 +260,8 @@ MAP *new_MAP(size_t capacity, float load_factor, hash_function_t hash_function) 
     map->status = (STATUS) {STATUS_OK, NULL};
     map->modification_count = 0;
     map->size = 0;
-    map->threshold = capacity * load_factor;
-    map->load_factor = load_factor;
+    map->load_factor = load_factor < 0 ? -1 : load_factor;
+    MAP_update_threshold(map);
     return map;
 }
 
