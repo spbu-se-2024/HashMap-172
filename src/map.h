@@ -35,6 +35,7 @@ void MAP_fprint_stats(MAP *map, FILE *stream);
 STATUS MAP_get_status(MAP *map);
 
 // true if there is error
+bool MAP_log_on_error(MAP *map);
 bool MAP_log_and_free_on_error(MAP *map);
 
 #endif // HASH_MAP_HASH_MAP_H

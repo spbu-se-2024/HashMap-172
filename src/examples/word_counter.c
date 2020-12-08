@@ -54,49 +54,63 @@ char *fread_word(FILE *stream, char *buffer, size_t buffer_length) {
     return buffer;
 }
 
-// FIXME too long function
-int run_experiment(FILE *input_file, size_t init_capacity, float load_factor) {
-    if (printf("\nInitial map capacity: %zu\n", init_capacity) < 0) {
-        LOG_ERROR("Unable to print initial map capacity\n");
-        return -1;
-    }
-    clock_t clock_before = clock();
-    MAP *map = new_MAP(init_capacity, load_factor, simple_hash);
-    if (map == NULL) {
-        LOG_ERROR("Unable to allocate memory for map\n");
-        return -1;
+MAP *get_word_to_count_map(FILE *file, size_t init_capacity, float load_factor) {
+    MAP *word_to_count_map = new_MAP(init_capacity, load_factor, simple_hash);
+    if (word_to_count_map == NULL) {
+        LOG_ERROR("Unable to allocate memory for word to count map\n");
+        return NULL;
     }
     char word[MAX_WORD_LENGTH];
-    while (fread_word(input_file, word, MAX_WORD_LENGTH) != NULL) {
-        int *count_ptr = MAP_get(map, word);
+    while (fread_word(file, word, MAX_WORD_LENGTH) != NULL) {
+        int *count_ptr = MAP_get(word_to_count_map, word);
         if (count_ptr == NULL) {
-            MAP_put(map, word, 1);
-            if (MAP_log_and_free_on_error(map)) return -1;
+            MAP_put(word_to_count_map, word, 1);
+            if (MAP_log_and_free_on_error(word_to_count_map)) return NULL;
         } else (*count_ptr)++;
     }
-    MAP_fprint_stats(map, stdout);
-    if (MAP_log_and_free_on_error(map)) return -1;
-    ENTRY_ITERATOR *iterator = MAP_get_entry_iterator(map);
-    if (MAP_log_and_free_on_error(map)) return -1;
-    ENTRY *most_common_word_entry = NULL, *cur_entry;
+    return word_to_count_map;
+}
+
+ENTRY *get_most_common_word_entry(MAP *word_to_count_map) {
+    ENTRY_ITERATOR *iterator = MAP_get_entry_iterator(word_to_count_map);
+    if (MAP_log_on_error(word_to_count_map)) return NULL;
+    ENTRY *most_common_word_entry = NULL;
+    ENTRY *cur_entry;
     while ((cur_entry = ENTRY_ITERATOR_next(iterator)) != NULL)
         if (most_common_word_entry == NULL || ENTRY_get_value(cur_entry) > ENTRY_get_value(most_common_word_entry))
             most_common_word_entry = cur_entry;
     ENTRY_ITERATOR_free(iterator);
-    if (MAP_log_and_free_on_error(map)) return -1;
     if (most_common_word_entry == NULL) {
-        LOG_ERROR("No words were found in input file\n");
-        MAP_free(map);
+        LOG_ERROR("No words were found\n");
+        return NULL;
+    }
+    return most_common_word_entry;
+}
+
+int run_experiment(FILE *input_file, size_t init_capacity, float load_factor) {
+    clock_t clock_before = clock();
+    if (printf("\nInitial word_to_count_map capacity: %zu\n", init_capacity) < 0) {
+        LOG_ERROR("Unable to print initial word_to_count_map capacity\n");
         return -1;
     }
+    MAP *word_to_count_map = get_word_to_count_map(input_file, init_capacity, load_factor);
+    if (word_to_count_map == NULL) return -1;
+    ENTRY *most_common_word_entry = get_most_common_word_entry(word_to_count_map);
+    if (most_common_word_entry == NULL) {
+        MAP_free(word_to_count_map);
+        return -1;
+    }
+    MAP_fprint_stats(word_to_count_map, stdout);
+    if (MAP_log_and_free_on_error(word_to_count_map)) return -1;
     if (printf("Unique word count: %zu\n"
                "Most common word: %s (appears %d times)\n",
-               MAP_size(map), ENTRY_get_key(most_common_word_entry), ENTRY_get_value(most_common_word_entry)) < 0) {
+               MAP_size(word_to_count_map), ENTRY_get_key(most_common_word_entry),
+               ENTRY_get_value(most_common_word_entry)) < 0) {
         LOG_ERROR("Unable to print results\n");
-        MAP_free(map);
+        MAP_free(word_to_count_map);
         return -1;
     }
-    MAP_free(map);
+    MAP_free(word_to_count_map);
     clock_t clock_after = clock();
     if (printf("Time taken: %f seconds\n\n", ((double) (clock_after - clock_before)) / CLOCKS_PER_SEC) < 0) {
         LOG_ERROR("Unable to print execution time\n");

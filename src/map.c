@@ -195,8 +195,12 @@ void MAP_fprint_stats(MAP *map, FILE *stream) {
         map->status = (STATUS) {PRINT_ERROR, "stats"};
 }
 
+bool MAP_log_on_error(MAP *map) {
+    return STATUS_log_on_error(&map->status, "map");
+}
+
 bool MAP_log_and_free_on_error(MAP *map) {
-    bool has_error = STATUS_log_on_error(&map->status, "map");
+    bool has_error = MAP_log_on_error(map);
     if (has_error) MAP_free(map);
     return has_error;
 }
