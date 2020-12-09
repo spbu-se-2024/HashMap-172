@@ -55,7 +55,7 @@ char *fread_word(FILE *stream, char *buffer, size_t buffer_length) {
 }
 
 MAP *get_word_to_count_map(FILE *file, size_t init_capacity, float load_factor) {
-    MAP *word_to_count_map = new_MAP(init_capacity, load_factor, simple_hash);
+    MAP *word_to_count_map = new_MAP(init_capacity, load_factor, polynomial_hash);
     if (word_to_count_map == NULL) {
         LOG_ERROR("Unable to allocate memory for word to count map\n");
         return NULL;

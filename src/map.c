@@ -2,6 +2,11 @@
 #include <memory.h>
 #include "map.h"
 
+/*
+ * For all non-negative integers x < MAX_CAPACITY:
+ *  - 2x must be within the range of size_t type
+ *  - x must be within the range of hash_t type
+ */
 static const size_t MAX_CAPACITY = 1 + ((HASH_MAX < SIZE_MAX / 2) ? HASH_MAX : (SIZE_MAX / 2));
 
 struct entry_t {
@@ -180,7 +185,6 @@ void MAP_fprint_stats(MAP *map, FILE *stream) {
     size_t chain_count = 0;
     for (size_t i = 0; i < map->capacity; i++)
         if (map->table[i] != NULL) chain_count++;
-    // FIXME we may be supposed to print chain lengths distribution as well
     if (fprintf(stream, "============\n"
                         "MAP stats:\n"
                         "capacity: %zu\n"
@@ -193,6 +197,10 @@ void MAP_fprint_stats(MAP *map, FILE *stream) {
                 map->capacity, map->threshold, map->size, chain_count,
                 map->size / (float) chain_count, map->modification_count) < 0)
         map->status = (STATUS) {PRINT_ERROR, "stats"};
+}
+
+bool MAP_is_ok(MAP *map) {
+    return STATUS_is_ok(&map->status);
 }
 
 bool MAP_log_on_error(MAP *map) {
@@ -217,15 +225,15 @@ static void ENTRY_advance_next_index(ENTRY_ITERATOR *entry) {
            (entry->next_entry = entry->map->table[entry->next_index++]) == NULL) {}
 }
 
-ENTRY *ENTRY_ITERATOR_next(ENTRY_ITERATOR *entry) {
-    if (entry->map->modification_count != entry->expected_modification_count) {
-        entry->map->status = (STATUS) {STATUS_CONCURRENT_MODIFICATION, "entry iterator"};
+ENTRY *ENTRY_ITERATOR_next(ENTRY_ITERATOR *iterator) {
+    if (iterator->map->modification_count != iterator->expected_modification_count) {
+        iterator->map->status = (STATUS) {STATUS_CONCURRENT_MODIFICATION, "entry iterator"};
         return NULL;
     }
-    if (entry->next_entry == NULL) return NULL;
-    ENTRY *current = entry->next_entry;
-    if ((entry->next_entry = entry->next_entry->next) == NULL)
-        ENTRY_advance_next_index(entry);
+    if (iterator->next_entry == NULL) return NULL;
+    ENTRY *current = iterator->next_entry;
+    if ((iterator->next_entry = iterator->next_entry->next) == NULL)
+        ENTRY_advance_next_index(iterator);
     return current;
 }
 
@@ -247,12 +255,18 @@ ENTRY_ITERATOR *MAP_get_entry_iterator(MAP *map) {
     return iterator;
 }
 
+static size_t capacity_to_valid_capacity(size_t capacity) {
+    if (capacity > MAX_CAPACITY) capacity = MAX_CAPACITY;
+    size_t valid_capacity = 1;
+    while (valid_capacity < capacity) valid_capacity <<= 1u;
+    if (valid_capacity > MAX_CAPACITY) valid_capacity >>= 1u;
+    return valid_capacity;
+}
+
 MAP *new_MAP(size_t capacity, float load_factor, hash_function_t hash_function) {
     MAP *map = malloc(sizeof(MAP));
     if (map == NULL) return NULL;
-    map->capacity = 1;
-    while (map->capacity < capacity && map->capacity << 1u <= MAX_CAPACITY)
-        map->capacity <<= 1u;
+    map->capacity = capacity_to_valid_capacity(capacity);
     map->table = calloc(map->capacity, sizeof(ENTRY *));
     if (map->table == NULL) {
         free(map);

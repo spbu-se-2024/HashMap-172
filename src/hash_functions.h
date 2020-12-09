@@ -1,8 +1,11 @@
-#ifndef HASH_MAP_HASH_FUNCTIONS_H
-#define HASH_MAP_HASH_FUNCTIONS_H
+#ifndef HASHMAP_172_HASH_FUNCTIONS_H
+#define HASHMAP_172_HASH_FUNCTIONS_H
 
 #include "hash.h"
 
-hash_t simple_hash(char *str);
+/*
+ * Returns str[0]*p^(n-1) + str[1]*p^(n-2) + ... + str[n-1], where n is a length of the str, ^ is exponentiation
+ */
+hash_t polynomial_hash(char *str);
 
-#endif // HASH_MAP_HASH_FUNCTIONS_H
+#endif // HASHMAP_172_HASH_FUNCTIONS_H
