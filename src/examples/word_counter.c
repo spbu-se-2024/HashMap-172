@@ -54,32 +54,33 @@ char *fread_word(FILE *stream, char *buffer, size_t buffer_length) {
     return buffer;
 }
 
-MAP *get_word_to_count_map(FILE *file, size_t init_capacity, float load_factor) {
-    MAP *word_to_count_map = new_MAP(init_capacity, load_factor, polynomial_hash);
+HM172Map *get_word_to_count_map(FILE *file, size_t init_capacity, float load_factor) {
+    HM172Map *word_to_count_map = hm172_new_map(init_capacity, load_factor, hm172_polynomial_hash);
     if (word_to_count_map == NULL) {
         LOG_ERROR("Unable to allocate memory for word to count map\n");
         return NULL;
     }
     char word[MAX_WORD_LENGTH];
     while (fread_word(file, word, MAX_WORD_LENGTH) != NULL) {
-        int *count_ptr = MAP_get(word_to_count_map, word);
+        int *count_ptr = hm172_get(word_to_count_map, word);
         if (count_ptr == NULL) {
-            MAP_put(word_to_count_map, word, 1);
-            if (MAP_log_and_free_on_error(word_to_count_map)) return NULL;
+            hm172_put(word_to_count_map, word, 1);
+            if (hm172_log_and_free_on_error(word_to_count_map)) return NULL;
         } else (*count_ptr)++;
     }
     return word_to_count_map;
 }
 
-ENTRY *get_most_common_word_entry(MAP *word_to_count_map) {
-    ENTRY_ITERATOR *iterator = MAP_get_entry_iterator(word_to_count_map);
-    if (MAP_log_on_error(word_to_count_map)) return NULL;
-    ENTRY *most_common_word_entry = NULL;
-    ENTRY *cur_entry;
-    while ((cur_entry = ENTRY_ITERATOR_next(iterator)) != NULL)
-        if (most_common_word_entry == NULL || ENTRY_get_value(cur_entry) > ENTRY_get_value(most_common_word_entry))
+HM172Entry *get_most_common_word_entry(HM172Map *word_to_count_map) {
+    HM172EntryIterator *iterator = hm172_get_entry_iterator(word_to_count_map);
+    if (hm172_log_on_error(word_to_count_map)) return NULL;
+    HM172Entry *most_common_word_entry = NULL;
+    HM172Entry *cur_entry;
+    while ((cur_entry = hm172_next_entry(iterator)) != NULL)
+        if (most_common_word_entry == NULL ||
+                hm172_get_entry_value(cur_entry) > hm172_get_entry_value(most_common_word_entry))
             most_common_word_entry = cur_entry;
-    ENTRY_ITERATOR_free(iterator);
+    hm172_free_entry_iterator(iterator);
     if (most_common_word_entry == NULL) {
         LOG_ERROR("No words were found\n");
         return NULL;
@@ -93,24 +94,24 @@ int run_experiment(FILE *input_file, FILE *output_file, size_t init_capacity, fl
         LOG_ERROR("Unable to print initial capacity\n");
         return -1;
     }
-    MAP *word_to_count_map = get_word_to_count_map(input_file, init_capacity, load_factor);
+    HM172Map *word_to_count_map = get_word_to_count_map(input_file, init_capacity, load_factor);
     if (word_to_count_map == NULL) return -1;
-    ENTRY *most_common_word_entry = get_most_common_word_entry(word_to_count_map);
+    HM172Entry *most_common_word_entry = get_most_common_word_entry(word_to_count_map);
     if (most_common_word_entry == NULL) {
-        MAP_free(word_to_count_map);
+        hm172_free(word_to_count_map);
         return -1;
     }
-    MAP_fprint_stats(word_to_count_map, output_file);
-    if (MAP_log_and_free_on_error(word_to_count_map)) return -1;
+    hm172_fprint_stats(word_to_count_map, output_file);
+    if (hm172_log_and_free_on_error(word_to_count_map)) return -1;
     if (fprintf(output_file, "Unique word count: %zu\n"
                "Most common word: %s (appears %d times)\n",
-               MAP_size(word_to_count_map), ENTRY_get_key(most_common_word_entry),
-               ENTRY_get_value(most_common_word_entry)) < 0) {
+                hm172_size(word_to_count_map), hm172_get_entry_key(most_common_word_entry),
+                hm172_get_entry_value(most_common_word_entry)) < 0) {
         LOG_ERROR("Unable to print results\n");
-        MAP_free(word_to_count_map);
+        hm172_free(word_to_count_map);
         return -1;
     }
-    MAP_free(word_to_count_map);
+    hm172_free(word_to_count_map);
     clock_t clock_after = clock();
     if (fprintf(output_file, "Time taken: %f seconds\n\n", ((double) (clock_after - clock_before)) / CLOCKS_PER_SEC) < 0) {
         LOG_ERROR("Unable to print execution time\n");
